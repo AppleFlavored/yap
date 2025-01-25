@@ -8,7 +8,7 @@ import java.awt.font.TextLayout
 import java.text.AttributedString
 
 class Text(text: String) : Block() {
-    private val attributedString = AttributedString(text).apply {
+    private val attributedString = AttributedString(text.padEnd(1, ' ')).apply {
         addAttribute(TextAttribute.SIZE, 13.3f)
     }
     private val lines = mutableListOf<Line>()

@@ -54,7 +54,7 @@ class ContentView : JComponent() {
         }
 
         val response = client.get(uri).getOrElse { exception ->
-            logger.error("Failed to load page from $uri: ${exception.message}")
+            logger.error("Failed to load page from $uri:\n${exception.stackTraceToString()}")
             return Result.failure(exception)
         }
 

@@ -7,8 +7,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
 
 class YapClient {
-    private val channel = SocketChannel.open()
-
     fun get(uri: URI): Result<YapResponse> {
         return makeRequest(Method.GET, uri, byteArrayOf())
     }
@@ -22,6 +20,7 @@ class YapClient {
             return Result.failure(IllegalArgumentException("URI schemes other than yap:// are not supported."))
         }
 
+        val channel = SocketChannel.open()
         val port = if (uri.port >= 0) uri.port else 80
         try {
             channel.connect(InetSocketAddress(uri.host, port))
@@ -29,12 +28,13 @@ class YapClient {
             return Result.failure(e)
         }
 
-        val requestBuffer = createRequestBuffer(method, uri.path, content.size)
+        val path = (uri.path ?: "/").ifEmpty { "/" }
+        val requestBuffer = createRequestBuffer(method, path, content.size)
         requestBuffer.put(content)
         requestBuffer.flip()
         channel.write(requestBuffer)
 
-        val response = parseResponseBuffer()
+        val response = parseResponseBuffer(channel)
         channel.close()
 
         return Result.success(response)
@@ -52,18 +52,22 @@ class YapClient {
         return buffer
     }
 
-    private fun parseResponseBuffer(): YapResponse {
+    private fun parseResponseBuffer(channel: SocketChannel): YapResponse {
         // Response Header:
         // <2:status_code> <4:content_length>
-        val headerBuffer = ByteBuffer.allocate(5)
-        channel.read(headerBuffer)
+        val headerBuffer = ByteBuffer.allocate(6)
+        while (headerBuffer.hasRemaining()) {
+            channel.read(headerBuffer)
+        }
         headerBuffer.flip()
 
         val statusCode = headerBuffer.getShort()
         val contentLength = headerBuffer.getInt()
 
         val contentBuffer = ByteBuffer.allocate(contentLength)
-        channel.read(contentBuffer)
+        while (contentBuffer.hasRemaining()) {
+            channel.read(contentBuffer)
+        }
         contentBuffer.flip()
 
         return YapResponse(statusCode, "No-Type", contentLength, contentBuffer.array())

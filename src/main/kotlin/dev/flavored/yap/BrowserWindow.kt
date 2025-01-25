@@ -5,6 +5,7 @@ import java.net.URI
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JFrame
+import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextField
@@ -38,6 +39,15 @@ class BrowserWindow {
             font = Font("Times", Font.PLAIN, 13)
             border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
             margin.set(0, 5, 0, 0)
+            addActionListener {
+                val result = contentView.loadPage(URI.create(text))
+                if (result.isFailure) {
+                    val exception = result.exceptionOrNull()
+                    JOptionPane.showMessageDialog(frame, "Failed to load page: ${exception?.message}", "Error loading page", JOptionPane.ERROR_MESSAGE)
+                    return@addActionListener
+                }
+                contentView.requestFocusInWindow()
+            }
         }
 
         return JPanel().apply {

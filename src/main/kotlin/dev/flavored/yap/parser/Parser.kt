@@ -94,7 +94,6 @@ class Parser(source: String) {
 
             attributes[attributeName] = attributeValue
         }
-        println(attributes)
         return attributes
     }
 

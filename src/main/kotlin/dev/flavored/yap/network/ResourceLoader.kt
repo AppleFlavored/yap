@@ -31,11 +31,11 @@ class ResourceLoader(private val client: YapClient) {
     private fun loadNetworkResource(uri: URI): InputStream {
         assert(uri.scheme == "yap") { "URI scheme must be yap://" }
         val response = client.get(uri).getOrElse { exception ->
-            logger.warn("Failed to load image resource from $uri: ${exception.message}")
+            logger.warn("Failed to load network resource from $uri: ${exception.message}")
             return InputStream.nullInputStream()
         }
         if (!response.isSuccessful) {
-            logger.warn("Request for image resource returned non-successful status code ${response.statusCode}")
+            logger.warn("Request for network resource returned non-successful status code ${response.statusCode}")
             return InputStream.nullInputStream()
         }
         return response.getBodyAsInputStream()
