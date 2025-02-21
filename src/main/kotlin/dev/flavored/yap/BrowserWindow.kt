@@ -29,7 +29,6 @@ class BrowserWindow {
             horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED
         }
         frame.contentPane.add(scrollPane, BorderLayout.CENTER)
-        contentView.loadPage(URI.create("internal:///pages/example.yap"))
 
         frame.isVisible = true
     }
@@ -42,8 +41,7 @@ class BrowserWindow {
             addActionListener {
                 val result = contentView.loadPage(URI.create(text))
                 if (result.isFailure) {
-                    val exception = result.exceptionOrNull()
-                    JOptionPane.showMessageDialog(frame, "Failed to load page: ${exception?.message}", "Error loading page", JOptionPane.ERROR_MESSAGE)
+                    contentView.loadPage(URI.create("internal:///pages/network-error.yap"))
                     return@addActionListener
                 }
                 contentView.requestFocusInWindow()
