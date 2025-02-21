@@ -1,5 +1,6 @@
 package dev.flavored.yap
 
+import dev.flavored.yap.document.Document
 import dev.flavored.yap.layout.*
 import dev.flavored.yap.network.ResourceLoader
 import dev.flavored.yap.network.YapClient
@@ -8,8 +9,10 @@ import org.slf4j.LoggerFactory
 import java.awt.*
 import java.awt.event.MouseEvent
 import java.awt.image.BufferedImage
+import java.io.InputStream
 import java.net.URI
 import javax.swing.JComponent
+import javax.swing.SwingWorker
 import javax.swing.event.MouseInputAdapter
 
 class ContentView : JComponent() {
@@ -49,33 +52,13 @@ class ContentView : JComponent() {
     }
 
     fun loadPage(uri: URI): Result<Unit> {
-        if (uri.scheme == "internal") {
-            return loadPageFromResource(uri)
+        val loadTask = PageRequestTask(client, uri) { document ->
+            layoutBuilder.build(document)
+            repaint()
         }
+        loadTask.execute()
 
-        val response = client.get(uri).getOrElse { exception ->
-            logger.error("Failed to load page from $uri:\n${exception.stackTraceToString()}")
-            return Result.failure(exception)
-        }
-
-        createDocument(response.getBodyAsString())
         return Result.success(Unit)
-    }
-
-    private fun loadPageFromResource(uri: URI): Result<Unit> {
-        val stream = resourceLoader.loadResource(uri)
-        val content = stream.bufferedReader().use { it.readText() }
-        createDocument(content)
-        return Result.success(Unit)
-    }
-
-    private fun createDocument(source: String) {
-        val parser = Parser(source)
-        val document = parser.parse()
-        logger.info("Parsed Document:\n${document.dump()}")
-
-        layoutBuilder.build(document)
-        repaint()
     }
 
     override fun paintComponent(g: Graphics) {
@@ -108,6 +91,30 @@ class ContentView : JComponent() {
     private class ContentViewInputListener(private val view: ContentView) : MouseInputAdapter() {
         override fun mouseClicked(e: MouseEvent) {
             view.requestFocusInWindow()
+        }
+    }
+
+    private class PageRequestTask(private val client: YapClient, private val uri: URI, private val readyCallback: (Document) -> Unit) : SwingWorker<Document, Any>() {
+        override fun doInBackground(): Document {
+            val content = when (uri.scheme) {
+                "yap" -> {
+                    val response = client.get(uri).getOrThrow()
+                    response.getBodyAsString()
+                }
+                "internal" -> {
+                    val stream = ContentView::class.java.getResourceAsStream(uri.path)
+                        ?: InputStream.nullInputStream()
+                    stream.reader(Charsets.UTF_8).readText()
+                }
+                else -> throw IllegalArgumentException("Unsupported URI scheme: ${uri.scheme}")
+            }
+
+            val parser = Parser(content)
+            return parser.parse()
+        }
+
+        override fun done() {
+            readyCallback(get())
         }
     }
 }
