@@ -21,7 +21,7 @@ class YapClient {
         }
 
         val channel = SocketChannel.open()
-        val port = if (uri.port >= 0) uri.port else 80
+        val port = if (uri.port >= 0) uri.port else 5713
         try {
             channel.connect(InetSocketAddress(uri.host, port))
         } catch (e: IOException) {
