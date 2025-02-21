@@ -5,7 +5,6 @@ import java.net.URI
 import javax.swing.BorderFactory
 import javax.swing.BoxLayout
 import javax.swing.JFrame
-import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextField
@@ -35,11 +34,13 @@ class BrowserWindow {
 
     private fun createTopPanel(): JPanel {
         val addressField = JTextField("").apply {
-            font = Font("Times", Font.PLAIN, 13)
             border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
             margin.set(0, 5, 0, 0)
             addActionListener {
-                val result = contentView.loadPage(URI.create(text))
+                val uri = sanitizeUri(text)
+                text = uri.toASCIIString()
+
+                val result = contentView.loadPage(uri)
                 if (result.isFailure) {
                     contentView.loadPage(URI.create("internal:///pages/network-error.yap"))
                     return@addActionListener
@@ -56,5 +57,15 @@ class BrowserWindow {
             )
             add(addressField)
         }
+    }
+
+    private fun sanitizeUri(uriString: String): URI {
+        var correctedUriString = uriString
+
+        if (!correctedUriString.contains("://")) {
+            correctedUriString = "yap://$uriString"
+        }
+
+        return URI.create(correctedUriString)
     }
 }
