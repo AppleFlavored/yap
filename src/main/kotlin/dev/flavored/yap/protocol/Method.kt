@@ -1,4 +1,5 @@
-package dev.flavored.yap.network
+package dev.flavored.yap.protocol
+
 
 enum class Method(val value: Byte) {
     GET(0),

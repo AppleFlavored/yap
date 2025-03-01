@@ -2,13 +2,14 @@ package dev.flavored.yap.parser
 
 enum class TokenKind {
     EOF,
-    CHARACTER,
-    SYMBOL,
+    UNKNOWN,
+    IDENTIFIER,
     STRING,
-    NUMBER,
-    EQ,
-    OPEN_PAREN,
-    CLOSE_PAREN,
-    OPEN_BRACE,
-    CLOSE_BRACE,
+
+    LPAREN,
+    RPAREN,
+    LBRACE,
+    RBRACE,
+    COLON,
+    COMMA
 }

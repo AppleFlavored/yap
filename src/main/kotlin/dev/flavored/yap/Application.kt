@@ -1,47 +1,24 @@
 package dev.flavored.yap
 
-import dev.flavored.yap.network.ResourceLoader
-import dev.flavored.yap.network.ServerInstance
-import dev.flavored.yap.network.YapClient
-import java.net.InetSocketAddress
-import javax.swing.UIManager
+import dev.flavored.yap.parser.Parser
 
 object Application {
-    private val crossContextClient = YapClient()
-    // NOTE: Resource loaders should probably be per-context.
-    val resourceLoader = ResourceLoader(crossContextClient)
-
-    private var runAsServer = false
-
-    private fun parseArguments(args: Array<String>) {
-        if (args.isEmpty()) {
-            return
-        }
-
-        for (i in args.indices) {
-            when (args[i]) {
-                "--server" -> runAsServer = true
-            }
-        }
-    }
 
     @JvmStatic
     fun main(args: Array<String>) {
-        parseArguments(args)
+        System.setProperty("awt.useSystemAAFontSettings", "lcd")
 
-        if (runAsServer) {
-            val server = ServerInstance()
-            server.start(InetSocketAddress(5713))
-            return
-        }
+        val parser = Parser()
+        parser.reset("p(\"Hello, Yap!\") img(src:\"example.png\")")
+        val document = parser.parse()
+        println(document.printToString())
 
-        System.setProperty("awt.useSystemAAFontSettings", "lcd");
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName())
-        } catch (ignored: Exception) {
-        }
-
-        val window = BrowserWindow()
-        window.start()
+//        val client = ProtocolClient()
+//        val response = client.send(Request.builder(URI("yap://localhost"))
+//            .body("Hello, Yap!")
+//            .build())
+//
+//        val responseBody = response.getOrNull() ?: return
+//        println(responseBody.getBodyAsString().getOrNull())
     }
 }

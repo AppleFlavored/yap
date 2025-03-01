@@ -1,150 +1,151 @@
 package dev.flavored.yap.parser
 
-import dev.flavored.yap.document.*
-import org.slf4j.LoggerFactory
+import dev.flavored.yap.dom.*
+import java.util.Optional
 
-class Parser(source: String) {
-    private val logger = LoggerFactory.getLogger(Parser::class.java)
-    private val tokenizer = Tokenizer(source)
-    private var currentToken: Token = tokenizer.next()
-    private val openElements = mutableListOf<ParentElement>()
+class Parser {
+    private var tokenizer = Tokenizer("")
+    private var currentToken: Token = tokenizer.nextToken()
+    private var context = ParserContext.ELEMENTS
+    private val openElements = mutableListOf<Element>()
 
-    fun parse(): Document {
-        // If the source is empty, return an empty document.
-        if (currentToken.kind == TokenKind.EOF) {
-            return Document()
-        }
-
-        openElements.add(Document())
-        while (tokenizer.hasNext()) {
-            parseElement()
-        }
-
-        val document = openElements.removeLast()
-        if (document is Document) {
-            return document
-        } else {
-            logger.warn("Expected document as last element (${openElements.count()} left on stack)")
-            return Document()
-        }
+    fun reset(source: String) {
+        tokenizer = Tokenizer(source)
+        currentToken = tokenizer.nextToken()
+        openElements.clear()
     }
 
-    private fun parseElement() {
-        if (currentToken.kind == TokenKind.SYMBOL) {
-            val elementName = currentToken.value
-            advance()
+    fun parse(): Document {
+        openElements.addLast(RootElement())
 
-            if (currentToken.kind == TokenKind.OPEN_PAREN) {
-                advance()
-                if (currentToken.kind == TokenKind.CLOSE_PAREN) {
-                    consume(TokenKind.CLOSE_PAREN)
-                    return handleElementWithNoAttributes(elementName)
-                }
-
-                if (currentToken.kind == TokenKind.SYMBOL) {
-                    val attributes = parseAttributes()
-                    consume(TokenKind.CLOSE_PAREN)
-                    return handleElementWithAttributes(elementName, attributes)
-                }
-
-                if (currentToken.kind == TokenKind.STRING) {
-                    val textContent = currentToken.value
-                    advance()
-                    consume(TokenKind.CLOSE_PAREN)
-                    return handleElementWithNoAttributes(elementName, textContent)
-                }
-
-                return handleElementWithNoAttributes(elementName)
-            }
-
-            if (currentToken.kind == TokenKind.OPEN_BRACE) {
-                advance()
-                return handleParentElement(elementName)
-            }
+        while (currentToken.kind != TokenKind.EOF) {
+            parseElement().ifPresent { openElements.last().appendChild(it) }
         }
 
-        if (currentToken.kind == TokenKind.CLOSE_BRACE) {
+        val document = Document()
+        assert(openElements.size == 1) { "Expected one element in the open elements stack" }
+        // Append the root element to the document node, and return.
+        document.appendChild(openElements.removeLast())
+        return document
+    }
+
+    private fun parseElement(): Optional<Element> {
+        val nameToken = currentToken
+        if (nameToken.kind != TokenKind.IDENTIFIER) {
+            return Optional.empty()
+        }
+        advance()
+
+        val element = createElement(nameToken.lexeme)
+
+        // If an LPAREN is present, parse the attributes.
+        context = ParserContext.ATTRIBUTES
+        if (currentToken.kind == TokenKind.LPAREN) {
+            parseAttributes(element)
+        }
+
+        context = ParserContext.ELEMENTS
+        return Optional.of(element)
+    }
+
+    private fun parseAttributes(element: Element) {
+        val attributes = mutableMapOf<String, String>()
+
+        advance() // Skip the LPAREN token.
+        if (currentToken.kind == TokenKind.RPAREN) {
             advance()
-            openElements.removeLast()
             return
         }
 
-        advance()
-    }
-
-    private fun parseAttributes(): Map<String, String> {
-        val attributes = mutableMapOf<String, String>()
-        while (tokenizer.hasNext() && currentToken.kind != TokenKind.CLOSE_PAREN) {
-            if (currentToken.kind != TokenKind.SYMBOL) {
-                logger.warn("Expected attribute name, but found '${currentToken.value}' instead.")
-                skipMalformedAttribute()
-                continue
+        // If the token is a STRING, then there are no attributes. Instead, append a text node to the open element.
+        if (currentToken.kind == TokenKind.STRING) {
+            element.appendChild(TextNode(currentToken.lexeme))
+            advance() // Skip the STRING token.
+            if (currentToken.kind == TokenKind.RPAREN) {
+                advance()
             }
+            return
+        }
 
-            val attributeName = currentToken.value
+        // TODO: Handle the case where the LPAREN is missing.
+        while (currentToken.kind != TokenKind.RPAREN) {
+            val attributeName = currentToken
+            if (attributeName.kind != TokenKind.IDENTIFIER) {
+                handleParserError()
+                element.setAttributes(attributes)
+                return
+            }
             advance()
-            consume(TokenKind.EQ)
 
-            if (currentToken.kind != TokenKind.STRING) {
-                logger.warn("Expected attribute value, but found '${currentToken.value}' instead.")
-                skipMalformedAttribute()
-                continue
+            // Skip the COLON token. If it's not present, skip the attribute value.
+            if (currentToken.kind != TokenKind.COLON) {
+                handleParserError()
+                element.setAttributes(attributes)
+                return
             }
-            val attributeValue = currentToken.value
 
-            attributes[attributeName] = attributeValue
-        }
-        return attributes
-    }
-
-    private fun skipMalformedAttribute() {
-        while (tokenizer.hasNext() && currentToken.kind != TokenKind.CLOSE_PAREN && currentToken.kind != TokenKind.SYMBOL) {
             advance()
-        }
-    }
-
-    private fun handleParentElement(elementName: String) {
-        val element = when (elementName) {
-            "row" -> ContainerElement(ContainerElement.Direction.ROW)
-            "col" -> ContainerElement(ContainerElement.Direction.COLUMN)
-            else -> {
-                logger.warn("Encountered unknown parent element '$elementName' while parsing.")
-                ContainerElement(ContainerElement.Direction.ROW)
+            val attributeValue = currentToken
+            if (attributeValue.kind != TokenKind.STRING) {
+                handleParserError()
+                element.setAttributes(attributes)
+                return
             }
-        }
-        openElements.last().children.add(element)
-        openElements.add(element)
-    }
+            advance() // Skip the attribute value token.
 
-    private fun handleElementWithNoAttributes(elementName: String, textContent: String = "") {
-        val element = when (elementName) {
-            "p" -> ParagraphElement().apply { text = textContent }
-            else -> {
-                logger.warn("Encountered unknown element '$elementName' while parsing.")
-                ParagraphElement()
-            }
+            attributes[attributeName.lexeme] = attributeValue.lexeme
         }
-        openElements.last().children.add(element)
-    }
 
-    private fun handleElementWithAttributes(elementName: String, attributes: Map<String, String>) {
-        val element = when (elementName) {
-            "img" -> ImageElement(attributes["src"] ?: "")
-            else -> {
-                logger.warn("Encountered unknown element with attributes '$elementName' while parsing.")
-                ParagraphElement()
-            }
-        }
-        openElements.last().children.add(element)
-    }
-
-    private fun consume(kind: TokenKind) {
-        if (currentToken.kind == kind) {
+        // If the RPAREN token is present, skip it. Otherwise, continue as if it was present.
+        if (currentToken.kind == TokenKind.RPAREN) {
             advance()
         }
+
+        element.setAttributes(attributes)
+    }
+
+    private fun createElement(name: String): Element {
+        val element = when (name) {
+            "p" -> ParagraphElement()
+            "img" -> ImageElement()
+            else -> throw IllegalArgumentException("Unknown element: $name")
+        }
+        return element
     }
 
     private fun advance() {
-        currentToken = tokenizer.next()
+        currentToken = tokenizer.nextToken()
     }
+
+    private fun handleParserError() {
+        // Skip tokens until we reach a context terminator.
+        while (!isContextTerminator(currentToken)) {
+            advance()
+        }
+        // Skip the terminator token itself.
+        advance()
+    }
+
+    private fun isContextTerminator(token: Token): Boolean {
+        if (token.kind == TokenKind.EOF) {
+            return true
+        }
+        return when (context) {
+            ParserContext.ELEMENTS -> {
+                token.kind == TokenKind.RBRACE || token.kind == TokenKind.RPAREN
+            }
+            ParserContext.INSIDE_ELEMENT -> {
+                token.kind == TokenKind.LBRACE
+            }
+            ParserContext.ATTRIBUTES -> {
+                token.kind == TokenKind.RPAREN
+            }
+        }
+    }
+}
+
+enum class ParserContext {
+    ELEMENTS,
+    INSIDE_ELEMENT,
+    ATTRIBUTES
 }
